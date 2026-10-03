@@ -1,4 +1,4 @@
-name: 一键编译高德净化插件
+name: Build AMapClean
 
 on:
   push:
@@ -10,46 +10,73 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: 展开源码
+      - name: Check files
         run: |
-          python3 - <<'PYEOF'
-          import re, base64, pathlib
-          p = pathlib.Path("src.all")
-          if not p.exists():
-              raise SystemExit("找不到 src.all")
-          text = p.read_text()
-          blocks = re.findall(r"===\s*FILE:\s*(\S+)\s*===\n(.*?)\n===\s*END\s*===", text, re.S)
-          out = pathlib.Path("AmapClean")
-          out.mkdir(exist_ok=True)
-          for name, b64 in blocks:
-              (out / name).write_bytes(base64.b64decode(b64.strip()))
-              print("  wrote", name)
-          print("ok")
-          PYEOF
+          echo "=== repo root ==="
+          ls -la
+          echo "=== src.all exists? ==="
+          if [ -f src.all ]; then
+            echo "YES, size:"
+            wc -c src.all
+          else
+            echo "NO - src.all NOT FOUND"
+            find . -name "src.all"
+          fi
+
+      - name: Decode sources
+        run: |
+          python3 -c "
+import re, base64, pathlib, sys
+p = pathlib.Path('src.all')
+if not p.exists():
+    sys.exit('src.all not found')
+text = p.read_text()
+blocks = re.findall(r'=== FILE: (\S+) ===\n(.*?)\n=== END ===', text, re.S)
+out = pathlib.Path('AmapClean')
+out.mkdir(exist_ok=True)
+for name, b64 in blocks:
+    (out / name).write_bytes(base64.b64decode(b64.strip()))
+    print('wrote', name)
+print('total', len(blocks))
+"
+          echo "=== decoded ==="
           ls -la AmapClean/
 
-      - name: 安装 Theos
+      - name: Install Theos
         run: |
           export THEOS=$HOME/theos
-          git clone --recursive --depth 1 https://github.com/theos/theos.git $THEOS
           echo "THEOS=$THEOS" >> $GITHUB_ENV
+          git clone --recursive --depth 1 https://github.com/theos/theos.git $THEOS
+          echo "=== theos installed ==="
+          ls $THEOS | head
 
-      - name: 下载 iOS SDK
+      - name: Install SDK
         run: |
+          set -e
           cd $THEOS
           mkdir -p sdks
-          curl -L -o sdks/sdk.tar.gz https://github.com/theos/sdks/raw/master/iPhoneOS16.5.sdk.tar.gz
-          cd sdks && tar xzf sdk.tar.gz && rm -f sdk.tar.gz
+          curl -L --retry 3 -o sdks/sdk.tar.gz https://github.com/theos/sdks/raw/master/iPhoneOS16.5.sdk.tar.gz
+          cd sdks
+          tar xzf sdk.tar.gz
+          rm -f sdk.tar.gz
+          echo "=== sdks ==="
           ls
 
-      - name: 编译
+      - name: Build
         run: |
           cd AmapClean
-          make package FINALPACKAGE=1 2>&1 | tail -40
-          find . -name "*.deb" -exec ls -la {} \;
+          echo "=== files ==="
+          ls -la
+          echo "=== make ==="
+          make package FINALPACKAGE=1 2>&1 | tail -60
+          echo "=== looking for deb ==="
+          find . -name "*.deb" -print
+          ls -la packages/ 2>/dev/null || echo "no packages dir"
 
-      - name: 上传成品
+      - name: Upload
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: 高德净化-deb
+          name: AMapClean-build
           path: AmapClean/packages/*.deb
+          if-no-files-found: warn
