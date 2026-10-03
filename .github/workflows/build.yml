@@ -10,19 +10,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check repo
-        run: |
-          echo "=== files ==="
-          ls -la
+      - name: Show repo files
+        run: ls -la
 
-      - name: Decode sources
-        run: |
-          python3 decode.py
+      - name: Decode sources from src.all
+        run: python3 .github/decode.py
 
-      - name: Verify decoded
-        run: |
-          echo "=== AmapClean ==="
-          ls -la AmapClean/ || echo "DECODE FAILED"
+      - name: Check decoded result
+        run: ls -la AmapClean/
 
       - name: Install Theos
         run: |
