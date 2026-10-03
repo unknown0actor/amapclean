@@ -26,15 +26,19 @@ jobs:
           git clone --recursive --depth 1 https://github.com/theos/theos.git $THEOS
           ls $THEOS | head
 
-      - name: Install iOS SDK
+      - name: Install iOS SDK 15.6
         run: |
+          set -e
           cd $THEOS
           mkdir -p sdks
-          curl -L --retry 3 -o sdks/sdk.tar.gz https://github.com/theos/sdks/raw/master/iPhoneOS16.5.sdk.tar.gz
           cd sdks
+          curl -L --retry 3 --retry-delay 5 -o sdk.tar.gz \
+            "https://github.com/theos/sdks/archive/refs/heads/master.tar.gz"
           tar xzf sdk.tar.gz
-          rm -f sdk.tar.gz
+          mv sdks-master/*.sdk . 2>/dev/null || true
+          rm -rf sdks-master sdk.tar.gz
           ls
+          echo "=== SDK ready ==="
 
       - name: Build deb
         run: |
