@@ -1,0 +1,55 @@
+name: 一键编译高德净化插件
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 展开源码
+        run: |
+          python3 - <<'PYEOF'
+          import re, base64, pathlib
+          p = pathlib.Path("src.all")
+          if not p.exists():
+              raise SystemExit("找不到 src.all")
+          text = p.read_text()
+          blocks = re.findall(r"===\s*FILE:\s*(\S+)\s*===\n(.*?)\n===\s*END\s*===", text, re.S)
+          out = pathlib.Path("AmapClean")
+          out.mkdir(exist_ok=True)
+          for name, b64 in blocks:
+              (out / name).write_bytes(base64.b64decode(b64.strip()))
+              print("  wrote", name)
+          print("ok")
+          PYEOF
+          ls -la AmapClean/
+
+      - name: 安装 Theos
+        run: |
+          export THEOS=$HOME/theos
+          git clone --recursive --depth 1 https://github.com/theos/theos.git $THEOS
+          echo "THEOS=$THEOS" >> $GITHUB_ENV
+
+      - name: 下载 iOS SDK
+        run: |
+          cd $THEOS
+          mkdir -p sdks
+          curl -L -o sdks/sdk.tar.gz https://github.com/theos/sdks/raw/master/iPhoneOS16.5.sdk.tar.gz
+          cd sdks && tar xzf sdk.tar.gz && rm -f sdk.tar.gz
+          ls
+
+      - name: 编译
+        run: |
+          cd AmapClean
+          make package FINALPACKAGE=1 2>&1 | tail -40
+          find . -name "*.deb" -exec ls -la {} \;
+
+      - name: 上传成品
+        uses: actions/upload-artifact@v4
+        with:
+          name: 高德净化-deb
+          path: AmapClean/packages/*.deb
