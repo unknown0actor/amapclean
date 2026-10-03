@@ -10,73 +10,50 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check files
+      - name: Check repo
         run: |
-          echo "=== repo root ==="
+          echo "=== files ==="
           ls -la
-          echo "=== src.all exists? ==="
-          if [ -f src.all ]; then
-            echo "YES, size:"
-            wc -c src.all
-          else
-            echo "NO - src.all NOT FOUND"
-            find . -name "src.all"
-          fi
 
       - name: Decode sources
         run: |
-          python3 -c "
-import re, base64, pathlib, sys
-p = pathlib.Path('src.all')
-if not p.exists():
-    sys.exit('src.all not found')
-text = p.read_text()
-blocks = re.findall(r'=== FILE: (\S+) ===\n(.*?)\n=== END ===', text, re.S)
-out = pathlib.Path('AmapClean')
-out.mkdir(exist_ok=True)
-for name, b64 in blocks:
-    (out / name).write_bytes(base64.b64decode(b64.strip()))
-    print('wrote', name)
-print('total', len(blocks))
-"
-          echo "=== decoded ==="
-          ls -la AmapClean/
+          python3 decode.py
+
+      - name: Verify decoded
+        run: |
+          echo "=== AmapClean ==="
+          ls -la AmapClean/ || echo "DECODE FAILED"
 
       - name: Install Theos
         run: |
           export THEOS=$HOME/theos
           echo "THEOS=$THEOS" >> $GITHUB_ENV
           git clone --recursive --depth 1 https://github.com/theos/theos.git $THEOS
-          echo "=== theos installed ==="
           ls $THEOS | head
 
-      - name: Install SDK
+      - name: Install iOS SDK
         run: |
-          set -e
           cd $THEOS
           mkdir -p sdks
           curl -L --retry 3 -o sdks/sdk.tar.gz https://github.com/theos/sdks/raw/master/iPhoneOS16.5.sdk.tar.gz
           cd sdks
           tar xzf sdk.tar.gz
           rm -f sdk.tar.gz
-          echo "=== sdks ==="
           ls
 
-      - name: Build
+      - name: Build deb
         run: |
           cd AmapClean
-          echo "=== files ==="
           ls -la
-          echo "=== make ==="
-          make package FINALPACKAGE=1 2>&1 | tail -60
-          echo "=== looking for deb ==="
+          make package FINALPACKAGE=1 2>&1 | tail -80
+          echo "=== deb files ==="
           find . -name "*.deb" -print
           ls -la packages/ 2>/dev/null || echo "no packages dir"
 
-      - name: Upload
+      - name: Upload artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: AMapClean-build
+          name: AMapClean-deb
           path: AmapClean/packages/*.deb
           if-no-files-found: warn
